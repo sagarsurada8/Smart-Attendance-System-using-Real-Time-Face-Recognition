@@ -984,7 +984,7 @@ window.addEventListener(
 // ============================================================
 // TAKE ATTENDANCE BUTTON
 // ============================================================
-const API_BASE = "https://sagar-face-attendance-2026-v2.onrender.com";
+const API_BASE = "http://127.0.0.1:5000";
 
 // Helper elements
 const addStudentModal = document.getElementById("addStudentModal");
@@ -1062,25 +1062,33 @@ function renderWebcamLoop() {
             webcamCanvas.height = webcamVideo.videoHeight || 480;
         }
 
+        // Draw video frame mirrored for natural camera view
+        ctx.save();
+        ctx.translate(webcamCanvas.width, 0);
+        ctx.scale(-1, 1);
         ctx.drawImage(webcamVideo, 0, 0, webcamCanvas.width, webcamCanvas.height);
+        ctx.restore();
 
         drawClientScanline(ctx, webcamCanvas.width, webcamCanvas.height);
 
         if (activeFaceBox) {
             const [x, y, w, h] = activeFaceBox;
+            // Calculate mirrored X coordinate so bounding boxes overlay correctly on the mirrored video
+            const mirroredX = webcamCanvas.width - x - w;
+
             ctx.strokeStyle = "#00ffe1";
             ctx.lineWidth = 3;
-            ctx.strokeRect(x, y, w, h);
+            ctx.strokeRect(mirroredX, y, w, h);
 
             ctx.fillStyle = "rgba(2, 6, 11, 0.85)";
-            ctx.fillRect(x, y - 25, w, 25);
+            ctx.fillRect(mirroredX, y - 25, w, 25);
             ctx.strokeStyle = "#00ffe1";
             ctx.lineWidth = 1;
-            ctx.strokeRect(x, y - 25, w, 25);
+            ctx.strokeRect(mirroredX, y - 25, w, 25);
 
             ctx.fillStyle = "#00ffe1";
             ctx.font = "12px Courier New";
-            ctx.fillText(activeAttendanceStatus || "FACE DETECTED", x + 8, y - 8);
+            ctx.fillText(activeAttendanceStatus || "FACE DETECTED", mirroredX + 8, y - 8);
         }
     }
     webcamAnimationId = requestAnimationFrame(renderWebcamLoop);

@@ -568,7 +568,6 @@ table.data-table tbody tr:hover td {
     height: auto;
     display: block;
     object-fit: cover;
-    transform: scaleX(-1); /* Mirror webcam feed for natural interaction */
 }
 
 #webcamVideo {
