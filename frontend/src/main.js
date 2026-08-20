@@ -1080,15 +1080,16 @@ function renderWebcamLoop() {
             ctx.lineWidth = 3;
             ctx.strokeRect(mirroredX, y, w, h);
 
+            const labelHeight = 35;
             ctx.fillStyle = "rgba(2, 6, 11, 0.85)";
-            ctx.fillRect(mirroredX, y - 25, w, 25);
+            ctx.fillRect(mirroredX, y - labelHeight, w, labelHeight);
             ctx.strokeStyle = "#00ffe1";
             ctx.lineWidth = 1;
-            ctx.strokeRect(mirroredX, y - 25, w, 25);
+            ctx.strokeRect(mirroredX, y - labelHeight, w, labelHeight);
 
             ctx.fillStyle = "#00ffe1";
-            ctx.font = "12px Courier New";
-            ctx.fillText(activeAttendanceStatus || "FACE DETECTED", mirroredX + 8, y - 8);
+            ctx.font = "bold 18px Courier New";
+            ctx.fillText(activeAttendanceStatus || "FACE DETECTED", mirroredX + 10, y - 11);
         }
     }
     webcamAnimationId = requestAnimationFrame(renderWebcamLoop);
