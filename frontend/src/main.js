@@ -984,7 +984,7 @@ window.addEventListener(
 // ============================================================
 // TAKE ATTENDANCE BUTTON
 // ============================================================
-const API_BASE = "http://127.0.0.1:5000";
+const API_BASE = "https://sagar-face-attendance-2026-v2.onrender.com";
 
 // Helper elements
 const addStudentModal = document.getElementById("addStudentModal");
