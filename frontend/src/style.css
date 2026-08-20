@@ -570,3 +570,11 @@ table.data-table tbody tr:hover td {
     object-fit: cover;
     transform: scaleX(-1); /* Mirror webcam feed for natural interaction */
 }
+
+#webcamVideo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
