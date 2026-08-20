@@ -1,0 +1,21 @@
+# Python virtual environment
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Node dependencies
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+
+# Local databases and models (re-generated dynamically)
+data/attendance.db
+data/faces/*
+models/face_model.yml
+models/labels.npy
+
+# OS specific files
+.DS_Store
+Thumbs.db

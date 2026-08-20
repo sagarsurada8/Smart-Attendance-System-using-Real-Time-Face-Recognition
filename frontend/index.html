@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Smart Attendance AI</title>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+
+<body>
+
+    <!-- 3D FACE -->
+    <div id="scene"></div>
+
+    <!-- TITLE -->
+    <div class="title">
+        FACE RECOGNITION
+    </div>
+
+    <!-- SCAN LINE -->
+    <div id="scanLine">
+        <div id="scanPoint"></div>
+    </div>
+
+    <!-- STATUS -->
+    <div class="status">
+        3D BIOMETRIC ANALYSIS • SCANNING
+    </div>
+
+    <!-- BUTTONS -->
+    <div class="controls">
+
+        <button id="attendanceBtn">
+            <span>◉</span>
+            TAKE ATTENDANCE
+        </button>
+
+        <button id="addStudentBtn">
+            <span>+</span>
+            ADD STUDENT
+        </button>
+
+        <button id="checkBtn">
+            <span>≡</span>
+            CHECK ATTENDANCE
+        </button>
+
+    </div>
+
+    <!-- ADD STUDENT MODAL -->
+    <div id="addStudentModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2>Add New Student</h2>
+            <form id="addStudentForm">
+                <div class="form-group">
+                    <label for="studentName">Student Name</label>
+                    <input type="text" id="studentName" required placeholder="Enter student name...">
+                </div>
+                <div class="form-group">
+                    <label for="rollNumber">Roll Number</label>
+                    <input type="text" id="rollNumber" required placeholder="Enter roll number...">
+                </div>
+                <div class="form-group">
+                    <label for="regNumber">Registration Number</label>
+                    <input type="text" id="regNumber" placeholder="Enter registration number (optional)...">
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" id="submitStudentBtn">REGISTER FACE</button>
+                    <button type="button" id="cancelStudentBtn">CANCEL</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- STATUS OVERLAY -->
+    <div id="statusOverlay" class="modal-overlay">
+        <div class="status-overlay-content">
+            <h2 id="statusTitle" style="display: none; font-size: 14px; margin-bottom: 5px;">LIVE SCANNER FEED</h2>
+            <div class="camera-feed-container" id="cameraFeedContainer" style="display: none; width: 100%; border: 1px solid rgba(0, 255, 225, 0.4); margin-bottom: 5px;">
+                <img id="cameraFeed" src="" style="width: 100%; display: block; background: #000;" alt="Camera Feed">
+            </div>
+            <div class="spinner" id="statusSpinner"></div>
+            <div id="statusOverlayMsg" class="status-message">INITIALIZING CAMERA...</div>
+            <div class="modal-actions" id="statusOverlayActions" style="margin-top: 10px; width: 100%;">
+                <button type="button" id="cancelScanBtn" style="display: none; width: 100%;">CANCEL SCAN</button>
+                <button type="button" id="closeStatusBtn" style="display: none; width: 100%;">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ATTENDANCE DASHBOARD MODAL -->
+    <div id="dashboardModal" class="modal-overlay">
+        <div class="modal-content dashboard-content">
+            <h2>Attendance Dashboard</h2>
+            
+            <!-- STATS GRID -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>TOTAL STUDENTS</div>
+                    <div id="statTotalStudents" class="stat-val">0</div>
+                </div>
+                <div class="stat-card">
+                    <div>PRESENT TODAY</div>
+                    <div id="statPresentToday" class="stat-val">0</div>
+                </div>
+                <div class="stat-card">
+                    <div>ATTENDANCE RATE</div>
+                    <div id="statAttendanceRate" class="stat-val">0%</div>
+                </div>
+            </div>
+
+            <!-- TABLES GRID -->
+            <div class="dashboard-tables">
+                <div class="table-container">
+                    <h3>Registered Students</h3>
+                    <div class="data-table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Roll</th>
+                                    <th>Reg Number</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                                <!-- Dynamic -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <h3>Today's Attendance</h3>
+                    <div class="data-table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Roll</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceTableBody">
+                                <!-- Dynamic -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" id="closeDashboardBtn">CLOSE DASHBOARD</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+
+</body>
+</html>
