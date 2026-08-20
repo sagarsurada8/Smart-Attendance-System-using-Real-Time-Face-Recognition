@@ -86,8 +86,9 @@
     <div id="statusOverlay" class="modal-overlay">
         <div class="status-overlay-content">
             <h2 id="statusTitle" style="display: none; font-size: 14px; margin-bottom: 5px;">LIVE SCANNER FEED</h2>
-            <div class="camera-feed-container" id="cameraFeedContainer" style="display: none; width: 100%; border: 1px solid rgba(0, 255, 225, 0.4); margin-bottom: 5px;">
-                <img id="cameraFeed" src="" style="width: 100%; display: block; background: #000;" alt="Camera Feed">
+            <div class="camera-feed-container" id="cameraFeedContainer" style="display: none; width: 100%; border: 1px solid rgba(0, 255, 225, 0.4); margin-bottom: 5px; position: relative;">
+                <video id="webcamVideo" autoplay muted playsinline style="display: none;"></video>
+                <canvas id="webcamCanvas" style="width: 100%; display: block; background: #000;"></canvas>
             </div>
             <div class="spinner" id="statusSpinner"></div>
             <div id="statusOverlayMsg" class="status-message">INITIALIZING CAMERA...</div>

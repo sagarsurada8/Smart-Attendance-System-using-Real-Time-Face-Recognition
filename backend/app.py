@@ -7,6 +7,7 @@ import time
 import numpy as np
 import cv2
 
+import base64
 import camera_state
 from database import create_database, add_student, get_student
 from recognize import recognize_once
@@ -33,49 +34,6 @@ DATABASE_PATH = os.path.join(
     "data",
     "attendance.db"
 )
-
-
-# ============================================================
-# PROGRESS TRACKING
-# ============================================================
-
-registration_progress = {}
-
-
-# ============================================================
-# VIDEO FEED AND CANCEL
-# ============================================================
-
-# Pre-generate a cyberpunk placeholder frame
-placeholder_img = np.zeros((480, 640, 3), dtype=np.uint8)
-cv2.putText(placeholder_img, "3D BIOMETRIC CAMERA STANDBY", (80, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (225, 255, 0), 2, cv2.LINE_AA)
-_, placeholder_jpeg = cv2.imencode('.jpg', placeholder_img)
-PLACEHOLDER_BYTES = placeholder_jpeg.tobytes()
-
-@app.route("/api/video_feed")
-def video_feed():
-    def gen_frames():
-        while True:
-            # Yield latest camera frame if available, else placeholder
-            frame = camera_state.latest_frame
-            if frame is not None:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-            else:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + PLACEHOLDER_BYTES + b'\r\n')
-            time.sleep(0.04) # Limit stream to ~25 FPS
-
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
-@app.route("/api/camera/cancel", methods=["POST"])
-def cancel_camera():
-    camera_state.cancel_requested = True
-    return jsonify({
-        "success": True,
-        "message": "Cancel request sent to camera thread"
-    })
 
 
 # ============================================================
@@ -108,306 +66,241 @@ def status():
 
 
 # ============================================================
-# TAKE ATTENDANCE / FACE RECOGNITION
+# BASE64 IMAGE DECODER
 # ============================================================
 
-@app.route("/api/recognition", methods=["GET"])
-def recognition():
-
+def decode_base64_image(base64_str):
     try:
-
-        print()
-        print("=" * 60)
-        print("FACE RECOGNITION REQUEST")
-        print("=" * 60)
-        print("Starting camera...")
-        print()
-
-        result = recognize_once(
-            timeout=15
-        )
-
-        if result is None:
-
-            return jsonify({
-                "success": False,
-                "recognized": False,
-                "message": "No result received"
-            }), 500
-
-
-        # ----------------------------------------------------
-        # RECOGNIZED
-        # ----------------------------------------------------
-
-        if result.get("recognized"):
-
-            return jsonify({
-
-                "success": True,
-
-                "recognized": True,
-
-                "name": result.get(
-                    "name",
-                    ""
-                ),
-
-                "roll_number": result.get(
-                    "roll_number",
-                    ""
-                ),
-
-                "match": result.get(
-                    "match",
-                    0
-                ),
-
-                "attendance": result.get(
-                    "attendance",
-                    ""
-                ),
-
-                "message": "Face recognized successfully"
-
-            })
-
-
-        # ----------------------------------------------------
-        # NOT RECOGNIZED
-        # ----------------------------------------------------
-
-        return jsonify({
-
-            "success": True,
-
-            "recognized": False,
-
-            "message": result.get(
-                "message",
-                "Face not recognized"
-            )
-
-        })
-
-
-    except Exception as error:
-
-        print()
-        print("=" * 60)
-        print("RECOGNITION ERROR")
-        print("=" * 60)
-        print(error)
-        print()
-
-        return jsonify({
-
-            "success": False,
-
-            "recognized": False,
-
-            "message": str(error)
-
-        }), 500
+        if ',' in base64_str:
+            base64_str = base64_str.split(',')[1]
+        img_data = base64.b64decode(base64_str)
+        nparr = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return img
+    except Exception as e:
+        print(f"Error decoding base64 image: {e}")
+        return None
 
 
 # ============================================================
-# ADD STUDENT
+# REGISTER STUDENT FRAME BY FRAME (WebRTC)
 # ============================================================
 
-@app.route("/api/register", methods=["POST"])
-def register():
+FACE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data",
+    "faces"
+)
 
+@app.route("/api/register_frame", methods=["POST"])
+def register_frame():
     try:
-
-        data = request.get_json(
-            silent=True
-        )
-
-
+        data = request.get_json(silent=True)
         if not data:
+            return jsonify({"success": False, "message": "No student information received"}), 400
 
-            return jsonify({
-
-                "success": False,
-
-                "message":
-                    "No student information received"
-
-            }), 400
-
-
-        name = str(
-            data.get(
-                "name",
-                ""
-            )
-        ).strip()
-
-
-        roll_number = str(
-            data.get(
-                "roll_number",
-                ""
-            )
-        ).strip()
-
-
-        registration_number = str(
-            data.get(
-                "registration_number",
-                ""
-            )
-        ).strip()
-
-
-        # ----------------------------------------------------
-        # VALIDATION
-        # ----------------------------------------------------
+        name = str(data.get("name", "")).strip()
+        roll_number = str(data.get("roll_number", "")).strip()
+        registration_number = str(data.get("registration_number", "")).strip()
+        image_base64 = data.get("image", "")
+        frame_index = int(data.get("frame_index", 0))
+        total_frames = int(data.get("total_frames", 40))
 
         if not name:
-
-            return jsonify({
-
-                "success": False,
-
-                "message":
-                    "Student name is required"
-
-            }), 400
-
-
+            return jsonify({"success": False, "message": "Student name is required"}), 400
         if not roll_number:
+            return jsonify({"success": False, "message": "Roll number is required"}), 400
+        if not image_base64:
+            return jsonify({"success": False, "message": "Image frame data is required"}), 400
 
-            return jsonify({
-
-                "success": False,
-
-                "message":
-                    "Roll number is required"
-
-            }), 400
-
-
-        if not registration_number:
-
-            return jsonify({
-
-                "success": False,
-
-                "message":
-                    "Registration number is required"
-
-            }), 400
-
-
-        # ----------------------------------------------------
-        # PRINT
-        # ----------------------------------------------------
-
-        print()
-        print("=" * 60)
-        print("NEW STUDENT REGISTRATION")
-        print("=" * 60)
-        print("Name       :", name)
-        print("Roll Number:", roll_number)
-        print("Registration:", registration_number)
-        print("=" * 60)
-        print()
-
-
-        # ----------------------------------------------------
-        # REGISTER
-        # ----------------------------------------------------
-
-        # Check if student already exists
-        student_exists = get_student(roll_number) is not None
-
-        if not student_exists:
-            add_result = add_student(
-                roll_number=roll_number,
-                name=name,
-                registration_number=registration_number
-            )
-            if not add_result.get("success"):
-                return jsonify(add_result), 400
-
-        # Define progress callback
-        registration_progress[roll_number] = 0
-        def progress_cb(current, total):
-            registration_progress[roll_number] = int((current / total) * 100)
-
-        # Run face registration
-        try:
-            result = register_student(
-                roll_number=roll_number,
-                progress_callback=progress_cb
-            )
-        finally:
-            registration_progress.pop(roll_number, None)
-
-        if result is None:
-            # Clean up if just created
+        # Add student to database on first frame
+        if frame_index == 0:
+            student_exists = get_student(roll_number) is not None
             if not student_exists:
-                try:
-                    connection = sqlite3.connect(DATABASE_PATH)
-                    cursor = connection.cursor()
-                    cursor.execute("DELETE FROM students WHERE roll_number = ?", (roll_number,))
-                    connection.commit()
-                    connection.close()
-                except Exception:
-                    pass
+                add_result = add_student(
+                    roll_number=roll_number,
+                    name=name,
+                    registration_number=registration_number
+                )
+                if not add_result.get("success"):
+                    return jsonify(add_result), 400
 
-            return jsonify({
-                "success": False,
-                "message": "Registration returned no result"
-            }), 500
+        # Decode image
+        frame = decode_base64_image(image_base64)
+        if frame is None:
+            return jsonify({"success": False, "message": "Failed to process image frame"}), 400
 
-        # Clean up database if registration failed and student didn't exist before
-        if not result.get("success") and not student_exists:
+        # Detect face
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "haarcascade_frontalface_default.xml")
+        detector = cv2.CascadeClassifier(cascade_path)
+        faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
+
+        if len(faces) == 0:
+            return jsonify({"success": False, "message": "Face not detected. Look straight at the camera."}), 200
+
+        # Select largest face
+        x, y, w, h = max(faces, key=lambda face: face[2] * face[3])
+        padding = 20
+        x1 = max(0, x - padding)
+        y1 = max(0, y - padding)
+        x2 = min(frame.shape[1], x + w + padding)
+        y2 = min(frame.shape[0], y + h + padding)
+
+        face_crop = gray[y1:y2, x1:x2]
+        face_resize = cv2.resize(face_crop, (200, 200))
+
+        # Save cropped face
+        student_folder = os.path.join(FACE_DIR, roll_number)
+        
+        # Clean folder on first frame
+        if frame_index == 0:
+            import shutil
+            if os.path.exists(student_folder):
+                shutil.rmtree(student_folder)
+        
+        os.makedirs(student_folder, exist_ok=True)
+        filename = os.path.join(student_folder, f"{frame_index + 1:03d}.jpg")
+        cv2.imwrite(filename, face_resize)
+
+        # Train model if this is the last frame
+        training = False
+        if frame_index == total_frames - 1:
+            from train_model import train_model
             try:
-                connection = sqlite3.connect(DATABASE_PATH)
-                cursor = connection.cursor()
-                cursor.execute("DELETE FROM students WHERE roll_number = ?", (roll_number,))
-                connection.commit()
-                connection.close()
-            except Exception:
-                pass
-
-        return jsonify(result)
-
-
-    except Exception as error:
-
-        print()
-        print("=" * 60)
-        print("REGISTRATION ERROR")
-        print("=" * 60)
-        print(error)
-        print()
+                training = train_model()
+            except Exception as e:
+                print(f"Training error: {e}")
 
         return jsonify({
+            "success": True,
+            "message": f"Frame {frame_index + 1}/{total_frames} captured",
+            "name": name,
+            "roll_number": roll_number,
+            "images": frame_index + 1,
+            "training": training
+        })
 
-            "success": False,
-
-            "message": str(error)
-
-        }), 500
+    except Exception as error:
+        print(f"Register frame error: {error}")
+        return jsonify({"success": False, "message": str(error)}), 500
 
 
 # ============================================================
-# GET REGISTER PROGRESS
+# RECOGNIZE FACE FRAME BY FRAME (WebRTC)
 # ============================================================
 
-@app.route("/api/register/progress/<roll_number>", methods=["GET"])
-def register_progress(roll_number):
+recognition_sessions = {}
 
-    progress = registration_progress.get(roll_number, 0)
+@app.route("/api/recognize_frame", methods=["POST"])
+def recognize_frame():
+    try:
+        data = request.get_json(silent=True)
+        if not data or not data.get("image"):
+            return jsonify({"success": False, "message": "No image frame received"}), 400
 
-    return jsonify({
-        "success": True,
-        "progress": progress
-    })
+        image_base64 = data.get("image")
+        frame = decode_base64_image(image_base64)
+        if frame is None:
+            return jsonify({"success": False, "message": "Failed to decode image frame"}), 400
+
+        # Grayscale and detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        cascade_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "haarcascade_frontalface_default.xml")
+        detector = cv2.CascadeClassifier(cascade_path)
+        faces = detector.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=5, minSize=(90, 90))
+
+        if len(faces) == 0:
+            return jsonify({
+                "success": True,
+                "detected": False,
+                "message": "Searching for face..."
+            })
+
+        # Load LBPH model & labels
+        from recognize import MODEL_PATH, LABELS_PATH, RECOGNITION_THRESHOLD, REQUIRED_MATCHES, get_student_name
+        import recognize
+        
+        # Reload model if updated
+        if os.path.exists(MODEL_PATH):
+            recognize.recognizer.read(MODEL_PATH)
+        if os.path.exists(LABELS_PATH):
+            recognize.labels = np.load(LABELS_PATH, allow_pickle=True).item()
+
+        # Process largest face
+        x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+        face_crop = gray[y:y + h, x:x + w]
+        face_resize = cv2.resize(face_crop, (200, 200))
+
+        label, distance = recognize.recognizer.predict(face_resize)
+        
+        recognized = False
+        student_name = "Unknown"
+        roll_number = ""
+        score = 0
+        attendance_message = "Verifying..."
+
+        if distance < RECOGNITION_THRESHOLD and label in recognize.labels:
+            roll_number = str(recognize.labels[label])
+            student_name = get_student_name(roll_number)
+            score = max(0, min(100, 100 - distance))
+            recognized = True
+
+            # Track consecutive matches
+            client_ip = request.remote_addr
+            now = time.time()
+            
+            # Clean up old sessions
+            if client_ip in recognition_sessions:
+                sess = recognition_sessions[client_ip]
+                if now - sess.get("last_time", 0) > 8.0 or sess.get("roll_number") != roll_number:
+                    recognition_sessions[client_ip] = {"roll_number": roll_number, "matches": 1, "last_time": now}
+                else:
+                    sess["matches"] += 1
+                    sess["last_time"] = now
+            else:
+                recognition_sessions[client_ip] = {"roll_number": roll_number, "matches": 1, "last_time": now}
+
+            matches = recognition_sessions[client_ip]["matches"]
+
+            # If matches met, mark attendance
+            if matches >= REQUIRED_MATCHES:
+                from database import mark_attendance
+                res = mark_attendance(roll_number)
+                if res.get("success"):
+                    attendance_message = "ATTENDANCE MARKED"
+                else:
+                    attendance_message = "ALREADY MARKED TODAY"
+
+                recognition_sessions.pop(client_ip, None)
+
+                return jsonify({
+                    "success": True,
+                    "detected": True,
+                    "recognized": True,
+                    "confirmed": True,
+                    "name": student_name,
+                    "roll_number": roll_number,
+                    "match": round(score, 1),
+                    "attendance": attendance_message,
+                    "box": [int(x), int(y), int(w), int(h)]
+                })
+
+        return jsonify({
+            "success": True,
+            "detected": True,
+            "recognized": recognized,
+            "confirmed": False,
+            "name": student_name,
+            "roll_number": roll_number,
+            "match": round(score, 1),
+            "attendance": attendance_message,
+            "box": [int(x), int(y), int(w), int(h)]
+        })
+
+    except Exception as e:
+        print(f"Recognize frame error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ============================================================
@@ -699,8 +592,8 @@ if __name__ == "__main__":
     print("Available APIs:")
     print("GET  /")
     print("GET  /api/status")
-    print("GET  /api/recognition")
-    print("POST /api/register")
+    print("POST /api/recognize_frame")
+    print("POST /api/register_frame")
     print("GET  /api/students")
     print("GET  /api/attendance")
     print("GET  /api/attendance/stats")
@@ -709,11 +602,12 @@ if __name__ == "__main__":
     print()
 
 
+    port = int(os.environ.get("PORT", 5000))
     app.run(
 
-        host="127.0.0.1",
+        host="0.0.0.0",
 
-        port=5000,
+        port=port,
 
         debug=False
 

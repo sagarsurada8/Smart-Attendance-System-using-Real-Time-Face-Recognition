@@ -998,10 +998,123 @@ const dashboardModal = document.getElementById("dashboardModal");
 const closeDashboardBtn = document.getElementById("closeDashboardBtn");
 
 // New Camera Elements
+// New Camera Elements
 const statusTitle = document.getElementById("statusTitle");
 const cameraFeedContainer = document.getElementById("cameraFeedContainer");
-const cameraFeed = document.getElementById("cameraFeed");
+const webcamVideo = document.getElementById("webcamVideo");
+const webcamCanvas = document.getElementById("webcamCanvas");
 const cancelScanBtn = document.getElementById("cancelScanBtn");
+
+// WebRTC Stream Management
+let webcamStream = null;
+let webcamActive = false;
+let webcamAnimationId = null;
+let activeFaceBox = null;
+let activeAttendanceStatus = "";
+
+async function startWebcam() {
+    if (webcamActive) return;
+    try {
+        webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480, facingMode: "user" },
+            audio: false
+        });
+        if (webcamVideo) {
+            webcamVideo.srcObject = webcamStream;
+            webcamVideo.play();
+        }
+        webcamActive = true;
+        renderWebcamLoop();
+    } catch (err) {
+        console.error("Error accessing webcam:", err);
+        showStatus("WEBCAM ACCESS ERROR:<br>Please ensure camera permissions are granted.", false, true);
+    }
+}
+
+function stopWebcam() {
+    webcamActive = false;
+    if (webcamAnimationId) {
+        cancelAnimationFrame(webcamAnimationId);
+        webcamAnimationId = null;
+    }
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(track => track.stop());
+        webcamStream = null;
+    }
+    if (webcamVideo) {
+        webcamVideo.srcObject = null;
+    }
+    if (webcamCanvas) {
+        const ctx = webcamCanvas.getContext("2d");
+        ctx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+    }
+    activeFaceBox = null;
+    activeAttendanceStatus = "";
+}
+
+function renderWebcamLoop() {
+    if (!webcamActive) return;
+    if (webcamVideo && webcamCanvas) {
+        const ctx = webcamCanvas.getContext("2d");
+        
+        if (webcamCanvas.width !== webcamVideo.videoWidth) {
+            webcamCanvas.width = webcamVideo.videoWidth || 640;
+            webcamCanvas.height = webcamVideo.videoHeight || 480;
+        }
+
+        ctx.drawImage(webcamVideo, 0, 0, webcamCanvas.width, webcamCanvas.height);
+
+        drawClientScanline(ctx, webcamCanvas.width, webcamCanvas.height);
+
+        if (activeFaceBox) {
+            const [x, y, w, h] = activeFaceBox;
+            ctx.strokeStyle = "#00ffe1";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+
+            ctx.fillStyle = "rgba(2, 6, 11, 0.85)";
+            ctx.fillRect(x, y - 25, w, 25);
+            ctx.strokeStyle = "#00ffe1";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y - 25, w, 25);
+
+            ctx.fillStyle = "#00ffe1";
+            ctx.font = "12px Courier New";
+            ctx.fillText(activeAttendanceStatus || "FACE DETECTED", x + 8, y - 8);
+        }
+    }
+    webcamAnimationId = requestAnimationFrame(renderWebcamLoop);
+}
+
+let scanlineY = 0;
+let scanlineDir = 1;
+function drawClientScanline(ctx, width, height) {
+    scanlineY += 4 * scanlineDir;
+    if (scanlineY >= height) {
+        scanlineY = height;
+        scanlineDir = -1;
+    } else if (scanlineY <= 0) {
+        scanlineY = 0;
+        scanlineDir = 1;
+    }
+    
+    ctx.strokeStyle = "rgba(0, 254, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, scanlineY);
+    ctx.lineTo(width, scanlineY);
+    ctx.stroke();
+}
+
+function captureWebcamFrame() {
+    if (!webcamCanvas || !webcamVideo) return null;
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = webcamVideo.videoWidth || 640;
+    tempCanvas.height = webcamVideo.videoHeight || 480;
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.drawImage(webcamVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+    return tempCanvas.toDataURL("image/jpeg", 0.85);
+}
 
 // Helper to show/hide modals
 function showModal(modal) {
@@ -1021,30 +1134,14 @@ function showStatus(message, showSpinner = true, showClose = false, showCamera =
     if (cameraFeedContainer) cameraFeedContainer.style.display = showCamera ? "block" : "none";
     if (cancelScanBtn) cancelScanBtn.style.display = showCancel ? "block" : "none";
     
-    if (showCamera) {
-        if (cameraFeed && cameraFeed.src !== `${API_BASE}/api/video_feed`) {
-            cameraFeed.src = `${API_BASE}/api/video_feed`;
-        }
-    } else {
-        if (cameraFeed) cameraFeed.src = "";
-    }
     showModal(statusOverlay);
 }
 
 // Close status overlay
 if (closeStatusBtn) {
-    closeStatusBtn.addEventListener("click", () => hideModal(statusOverlay));
-}
-
-// Cancel scan event listener
-if (cancelScanBtn) {
-    cancelScanBtn.addEventListener("click", async () => {
-        showStatus("Cancelling scan...", true, false, false, false);
-        try {
-            await fetch(`${API_BASE}/api/camera/cancel`, { method: "POST" });
-        } catch (e) {
-            console.error(e);
-        }
+    closeStatusBtn.addEventListener("click", () => {
+        stopWebcam();
+        hideModal(statusOverlay);
     });
 }
 
@@ -1053,30 +1150,64 @@ const attendanceBtn = document.getElementById("attendanceBtn");
 if (attendanceBtn) {
     attendanceBtn.addEventListener("click", async function () {
         console.log("TAKE ATTENDANCE CLICKED");
-        showStatus("Initializing system camera scanner...<br>Look directly into the webcam.", true, false, true, true);
+        showStatus("Initializing camera scanner...<br>Look directly into the webcam.", true, false, true, true);
+        
+        await startWebcam();
+        
+        let isScanning = true;
+        let scanTimeout = setTimeout(() => {
+            isScanning = false;
+            stopWebcam();
+            showStatus("Attendance scan timed out.<br>No recognized faces found.", false, true);
+        }, 15000);
 
-        try {
-            const response = await fetch(`${API_BASE}/api/recognition`);
-            const data = await response.json();
+        cancelScanBtn.onclick = () => {
+            isScanning = false;
+            clearTimeout(scanTimeout);
+            stopWebcam();
+            showStatus("Attendance scan cancelled.", false, true);
+        };
 
-            if (data.success) {
-                if (data.recognized) {
-                    showStatus(
-                        `IDENTITY VERIFIED!<br><br>Name: ${data.name}<br>Roll: ${data.roll_number}<br>Status: ${data.attendance}`,
-                        false,
-                        true,
-                        false,
-                        false
-                    );
-                } else {
-                    showStatus(`RECOGNITION FAILED:<br>${data.message || 'Face not recognized'}`, false, true, false, false);
-                }
-            } else {
-                showStatus(`ERROR: ${data.message || 'Verification error'}`, false, true, false, false);
+        while (isScanning) {
+            const frameData = captureWebcamFrame();
+            if (!frameData) {
+                await new Promise(r => setTimeout(r, 200));
+                continue;
             }
-        } catch (error) {
-            console.error(error);
-            showStatus("FAILED TO CONNECT TO BACKEND SERVER", false, true, false, false);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/recognize_frame`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: frameData })
+                });
+                const data = await response.json();
+
+                if (data.success && isScanning) {
+                    if (data.detected) {
+                        activeFaceBox = data.box;
+                        if (data.recognized) {
+                            activeAttendanceStatus = `${data.name} (${data.match}%)`;
+                            if (data.confirmed) {
+                                isScanning = false;
+                                clearTimeout(scanTimeout);
+                                stopWebcam();
+                                showStatus(`IDENTITY VERIFIED!<br><br>Name: ${data.name}<br>Roll: ${data.roll_number}<br>Status: ${data.attendance}`, false, true);
+                                break;
+                            }
+                        } else {
+                            activeAttendanceStatus = "UNKNOWN IDENTITY";
+                        }
+                    } else {
+                        activeFaceBox = null;
+                        activeAttendanceStatus = "";
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            await new Promise(r => setTimeout(r, 350));
         }
     });
 }
@@ -1108,45 +1239,62 @@ if (addStudentForm) {
 
         showStatus("Saving student info & initiating camera capture...<br>Look at the camera.<br><br>CAPTURING FACE: 0%", true, false, true, true);
 
-        // Start progress polling
-        let progressInterval = setInterval(async () => {
+        await startWebcam();
+
+        let frameIndex = 0;
+        const totalFrames = 40;
+        let isRegistering = true;
+
+        cancelScanBtn.onclick = () => {
+            isRegistering = false;
+            stopWebcam();
+            showStatus("Registration cancelled.", false, true);
+        };
+
+        while (frameIndex < totalFrames && isRegistering) {
+            const frameData = captureWebcamFrame();
+            if (!frameData) {
+                await new Promise(r => setTimeout(r, 200));
+                continue;
+            }
+
+            const pct = Math.round((frameIndex / totalFrames) * 100);
+            showStatus(`Saving student info & initiating camera capture...<br>Look at the camera.<br><br><span style="font-size: 20px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #00ffe1;">CAPTURING FACE: ${pct}%</span>`, true, false, true, true);
+
             try {
-                const res = await fetch(`${API_BASE}/api/register/progress/${roll_number}`);
-                const data = await res.json();
-                if (data.success) {
-                    showStatus(`Saving student info & initiating camera capture...<br>Look at the camera.<br><br><span style="font-size: 20px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #00ffe1;">CAPTURING FACE: ${data.progress}%</span>`, true, false, true, true);
+                const response = await fetch(`${API_BASE}/api/register_frame`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        name,
+                        roll_number,
+                        registration_number,
+                        image: frameData,
+                        frame_index: frameIndex,
+                        total_frames: totalFrames
+                    })
+                });
+                const data = await response.json();
+
+                if (data.success && isRegistering) {
+                    frameIndex++;
+                    activeFaceBox = [160, 120, 320, 240]; // Center target box
+                    activeAttendanceStatus = `CAPTURED (${frameIndex}/${totalFrames})`;
+                } else if (isRegistering) {
+                    showStatus(`Saving student info & initiating camera capture...<br><span style="color:#ff3333;">${data.message || 'Face not detected'}</span><br><br><span style="font-size: 20px; font-weight: bold; color: #fff; text-shadow: 0 0 10px #00ffe1;">CAPTURING FACE: ${pct}%</span>`, true, false, true, true);
+                    activeFaceBox = null;
+                    activeAttendanceStatus = "";
                 }
-            } catch (e) {
-                console.error("Error fetching registration progress:", e);
+            } catch (err) {
+                console.error(err);
             }
-        }, 400);
 
-        try {
-            const response = await fetch(`${API_BASE}/api/register`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ name, roll_number, registration_number })
-            });
-            clearInterval(progressInterval);
-            const data = await response.json();
+            await new Promise(r => setTimeout(r, 250));
+        }
 
-            if (data.success) {
-                showStatus(
-                    `REGISTRATION SUCCESSFUL!<br><br>Name: ${data.name}<br>Roll: ${data.roll_number}<br>Images Captured: ${data.images}<br>Model status: Trained`,
-                    false,
-                    true,
-                    false,
-                    false
-                );
-            } else {
-                showStatus(`REGISTRATION FAILED:<br>${data.message || 'Could not complete registration'}`, false, true, false, false);
-            }
-        } catch (error) {
-            clearInterval(progressInterval);
-            console.error(error);
-            showStatus("CONNECTION ERROR:<br>Could not reach backend server.", false, true, false, false);
+        if (isRegistering) {
+            stopWebcam();
+            showStatus(`REGISTRATION SUCCESSFUL!<br><br>Name: ${name}<br>Roll: ${roll_number}<br>Model status: Trained successfully.`, false, true);
         }
     });
 }

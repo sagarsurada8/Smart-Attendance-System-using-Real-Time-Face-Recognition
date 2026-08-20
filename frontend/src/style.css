@@ -563,9 +563,10 @@ table.data-table tbody tr:hover td {
     position: relative;
 }
 
-#cameraFeed {
+#webcamCanvas {
     width: 100%;
     height: auto;
     display: block;
     object-fit: cover;
+    transform: scaleX(-1); /* Mirror webcam feed for natural interaction */
 }
