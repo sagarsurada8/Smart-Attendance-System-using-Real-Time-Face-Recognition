@@ -246,22 +246,25 @@ def recognize_frame():
             score = max(0, min(100, 100 - distance))
             recognized = True
 
-            # Track consecutive matches
+            # Track matches per roll number for this client (robust accumulator)
             client_ip = request.remote_addr
             now = time.time()
             
-            # Clean up old sessions
-            if client_ip in recognition_sessions:
-                sess = recognition_sessions[client_ip]
-                if now - sess.get("last_time", 0) > 8.0 or sess.get("roll_number") != roll_number:
-                    recognition_sessions[client_ip] = {"roll_number": roll_number, "matches": 1, "last_time": now}
-                else:
-                    sess["matches"] += 1
-                    sess["last_time"] = now
-            else:
-                recognition_sessions[client_ip] = {"roll_number": roll_number, "matches": 1, "last_time": now}
-
-            matches = recognition_sessions[client_ip]["matches"]
+            if client_ip not in recognition_sessions:
+                recognition_sessions[client_ip] = {"last_time": now, "counts": {}}
+                
+            session = recognition_sessions[client_ip]
+            
+            # Reset session if inactive for > 8 seconds
+            if now - session.get("last_time", 0) > 8.0:
+                session["counts"] = {}
+                
+            session["last_time"] = now
+            counts = session["counts"]
+            
+            # Increment count for this roll number
+            counts[roll_number] = counts.get(roll_number, 0) + 1
+            matches = counts[roll_number]
 
             # If matches met, mark attendance
             if matches >= REQUIRED_MATCHES:

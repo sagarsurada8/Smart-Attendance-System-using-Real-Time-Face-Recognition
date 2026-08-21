@@ -861,18 +861,11 @@ function updateScanLine() {
 
     const scanWidth =
         Math.max(
-
-            180,
-
+            260,
             Math.min(
-
-                300,
-
-                faceWidth *
-                0.80
-
+                450,
+                faceWidth * 1.30
             )
-
         );
 
 
@@ -881,7 +874,7 @@ function updateScanLine() {
     // --------------------------------------------------------
 
     scanLine.style.left =
-        centerX + "px";
+        (centerX - (scanWidth / 2)) + "px";
 
 
     scanLine.style.top =
