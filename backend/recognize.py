@@ -40,7 +40,7 @@ DATABASE_PATH = os.path.join(
 
 # Lower = stricter recognition
 # 120 is your current value.
-RECOGNITION_THRESHOLD = 100
+RECOGNITION_THRESHOLD = 70
 
 # Number of matching frames required
 REQUIRED_MATCHES = 3
