@@ -40,7 +40,7 @@ DATABASE_PATH = os.path.join(
 
 # Lower = stricter recognition
 # 120 is your current value.
-RECOGNITION_THRESHOLD = 55
+RECOGNITION_THRESHOLD = 40
 
 # Number of matching frames required
 REQUIRED_MATCHES = 3
@@ -92,21 +92,10 @@ def get_student_name(roll_number):
 # ============================================================
 
 if not os.path.exists(MODEL_PATH):
-
-    raise FileNotFoundError(
-        "\nFace model not found.\n"
-        "Run:\n"
-        "python backend\\train_model.py\n"
-    )
-
+    print("WARNING: Face model file (face_model.yml) is missing. Start in registration-only mode.")
 
 if not os.path.exists(LABELS_PATH):
-
-    raise FileNotFoundError(
-        "\nLabels file not found.\n"
-        "Run:\n"
-        "python backend\\train_model.py\n"
-    )
+    print("WARNING: Labels mapping file (labels.npy) is missing. Start in registration-only mode.")
 
 
 # ============================================================

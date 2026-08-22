@@ -240,13 +240,23 @@ def recognize_frame():
         face_crop = cv2.equalizeHist(face_crop)
         face_resize = cv2.resize(face_crop, (200, 200))
 
-        label, distance = recognize.recognizer.predict(face_resize)
-        
+        label = -1
+        distance = 999.0
+        try:
+            if os.path.exists(MODEL_PATH) and len(recognize.labels) > 0:
+                label, distance = recognize.recognizer.predict(face_resize)
+        except Exception as e:
+            print(f"Prediction skipped (model not trained yet): {e}")
+
         recognized = False
         student_name = "Unknown"
         roll_number = ""
         score = 0
         attendance_message = "Verifying..."
+        
+        # Diagnostic logging
+        temp_roll = str(recognize.labels.get(label, "Unknown"))
+        print(f"[RECOGNIZE] Predicted: Label {label} (Roll: {temp_roll}), Distance: {distance:.2f}, Max Allowed Threshold: {RECOGNITION_THRESHOLD}")
 
         if distance < RECOGNITION_THRESHOLD and label in recognize.labels:
             roll_number = str(recognize.labels[label])
