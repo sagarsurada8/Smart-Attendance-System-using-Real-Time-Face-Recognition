@@ -229,7 +229,13 @@ def recognize_frame():
 
         # Process largest face
         x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-        face_crop = gray[y:y + h, x:x + w]
+        padding = 20
+        x1 = max(0, x - padding)
+        y1 = max(0, y - padding)
+        x2 = min(frame.shape[1], x + w + padding)
+        y2 = min(frame.shape[0], y + h + padding)
+
+        face_crop = gray[y1:y2, x1:x2]
         face_resize = cv2.resize(face_crop, (200, 200))
 
         label, distance = recognize.recognizer.predict(face_resize)
