@@ -235,6 +235,9 @@ def train_model():
                 continue
 
 
+            # Equalize histogram for lighting normalization
+            image = cv2.equalizeHist(image)
+            
             # Resize to the same size
             image = cv2.resize(
                 image,

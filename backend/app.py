@@ -148,6 +148,7 @@ def register_frame():
         y2 = min(frame.shape[0], y + h + padding)
 
         face_crop = gray[y1:y2, x1:x2]
+        face_crop = cv2.equalizeHist(face_crop)
         face_resize = cv2.resize(face_crop, (200, 200))
 
         # Save cropped face
@@ -236,6 +237,7 @@ def recognize_frame():
         y2 = min(frame.shape[0], y + h + padding)
 
         face_crop = gray[y1:y2, x1:x2]
+        face_crop = cv2.equalizeHist(face_crop)
         face_resize = cv2.resize(face_crop, (200, 200))
 
         label, distance = recognize.recognizer.predict(face_resize)
