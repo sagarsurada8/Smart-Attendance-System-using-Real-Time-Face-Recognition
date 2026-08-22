@@ -874,7 +874,7 @@ function updateScanLine() {
     // --------------------------------------------------------
 
     scanLine.style.left =
-        (centerX - (scanWidth / 2)) + "px";
+        centerX + "px";
 
 
     scanLine.style.top =
@@ -977,6 +977,8 @@ window.addEventListener(
 // TAKE ATTENDANCE BUTTON
 // ============================================================
 const API_BASE = "http://127.0.0.1:5000";
+console.log("=== BIOMETRIC HUD ACTIVE ===");
+console.log("API Base URL:", API_BASE);
 
 // Helper elements
 const addStudentModal = document.getElementById("addStudentModal");
