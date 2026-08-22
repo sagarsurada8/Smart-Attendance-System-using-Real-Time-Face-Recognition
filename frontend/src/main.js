@@ -976,7 +976,9 @@ window.addEventListener(
 // ============================================================
 // TAKE ATTENDANCE BUTTON
 // ============================================================
-const API_BASE = "http://127.0.0.1:5000";
+const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? `http://${window.location.hostname}:5000`
+    : "https://sagar-face-attendance-2026-v2.onrender.com";
 console.log("=== BIOMETRIC HUD ACTIVE ===");
 console.log("API Base URL:", API_BASE);
 
